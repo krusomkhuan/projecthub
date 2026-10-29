@@ -1,0 +1,18 @@
+# ไฟล์แนบของผู้ใช้ (รายงานนักเรียน แบบฟอร์ม ภาพแจ้งปัญหา) — ข้อมูลจริง ห้ามขึ้น git
+uploads/*
+!uploads/.htaccess
+
+# ไฟล์สำรองข้อมูล (มีฐานข้อมูลทั้งหมด รวมชื่อผู้ใช้และรหัสผ่านที่เข้ารหัส)
+backups/*
+!backups/.htaccess
+
+# สถานะการติดตั้งของแต่ละเครื่อง
+install/install.lock
+
+# ไฟล์ของระบบปฏิบัติการ / editor
+Thumbs.db
+.DS_Store
+desktop.ini
+.vscode/
+.idea/
+*.log

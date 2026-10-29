@@ -1,0 +1,2 @@
+# ห้ามเข้าถึงไฟล์แนบโดยตรง ให้ดาวน์โหลดผ่าน app/download.php เท่านั้น
+Require all denied
