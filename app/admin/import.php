@@ -190,7 +190,12 @@ $counts = [
 $pageTitle = 'นำเข้า' . $short;
 require APP_ROOT . '/inc/header.php';
 ?>
-<div class="page-head"><h1><i class="bi bi-<?= $icon ?>"></i> <?= e($title) ?></h1></div>
+<div class="page-head"><h1><i class="bi bi-<?= $icon ?>"></i> <?= e($title) ?></h1>
+  <div class="d-flex gap-2">
+    <a href="<?= url('app/admin/export.php?type=' . $type) ?>" class="btn btn-success"><i class="bi bi-file-earmark-excel"></i> ส่งออก<?= e($short) ?> (Excel)</a>
+    <a href="<?= url('app/admin/export.php?type=' . $type . '&format=csv') ?>" class="btn btn-outline-success"><i class="bi bi-filetype-csv"></i> CSV</a>
+  </div>
+</div>
 <ul class="nav nav-pills flex-wrap gap-1 mb-3">
   <?php foreach ($types as $k => [$ic, $lbl]): ?>
     <li class="nav-item"><a class="nav-link<?= $k === $type ? ' active' : '' ?>" href="?type=<?= $k ?>"><i class="bi bi-<?= $ic ?>"></i> <?= e($lbl) ?> <span class="badge text-bg-light border"><?= (int)$counts[$k] ?></span></a></li>
@@ -222,6 +227,7 @@ require APP_ROOT . '/inc/header.php';
     <a class="btn btn-outline-primary btn-sm" href="<?= url('app/admin/template.php?type=' . $type) ?>"><i class="bi bi-download"></i> ดาวน์โหลดไฟล์ตัวอย่าง</a>
     <hr>
     <p class="text-muted mb-0">รองรับไฟล์ Excel (.xlsx — อ่านแผ่นงานแรก) และ CSV ทั้ง UTF-8 / TIS-620 · แถวหัวตารางจะถูกข้ามอัตโนมัติ<br>
+      <strong>แก้ไขข้อมูลจำนวนมาก:</strong> กดส่งออก Excel แก้ไขในไฟล์ แล้วนำเข้ากลับ (คอลัมน์ที่มี * เป็นข้อมูลประกอบ ระบบไม่ใช้ตอนนำเข้า)<br>
       ลำดับที่แนะนำ: แผนกวิชา → สาขาวิชา → ครูผู้สอน → กลุ่มเรียน → นักเรียน นักศึกษา → รายวิชาโครงงาน<br>กลุ่มโครงงานของผู้เรียน นำเข้าได้ที่หน้ารายวิชาของแต่ละกลุ่มเรียน</p>
   </div></div></div>
 </div>

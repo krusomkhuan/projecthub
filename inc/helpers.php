@@ -40,7 +40,7 @@ const GRADE_OPTIONS = ['4', '3.5', '3', '2.5', '2', '1.5', '1', '0', 'ขร', '
 const ALLOWED_UPLOADS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'zip', 'rar', 'mp4'];
 
 // เวอร์ชันของระบบ: ปรับเลขทุกครั้งที่ออกรุ่นใหม่ (หลัก.รอง.แก้ไข)
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 const APP_RELEASE_DATE = '2026-10-30';
 const DEVELOPER_CREDIT ='ผู้พัฒนาระบบ : ครูสมควร สากำ แผนกวิชาเทคโนโลยีธุรกิจดิจิทัล วิทยาลัยการอาชีพโพนทอง';
 
@@ -280,7 +280,7 @@ function strip_header(array $rows, array $headerWords): array
 function send_csv(string $filename, array $header, array $rows): void
 {
     header('Content-Type: text/csv; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header("Content-Disposition: attachment; filename*=UTF-8''" . rawurlencode($filename));
     $out = fopen('php://output', 'w');
     fwrite($out, "\xEF\xBB\xBF");
     fputcsv($out, $header, ',', '"', '');
@@ -585,4 +585,80 @@ function import_class_students(array $classroom, array $rows): array
         }
     }
     return [$added, $updated, $skipped];
+}
+
+/**
+ * ส่งไฟล์ Excel (.xlsx) แผ่นงานเดียว: หัวตารางตัวหนา ทุกช่องเป็นข้อความ (รหัสที่ขึ้นต้นด้วย 0 จะไม่หาย)
+ */
+function send_xlsx(string $filename, array $header, array $rows, string $sheetName = 'Sheet1'): void
+{
+    require_once APP_ROOT . '/inc/backup.php';
+    $esc = function ($v): string {
+        // ตัดอักขระควบคุมที่ XML ไม่อนุญาต
+        return htmlspecialchars((string)preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/u', '', (string)$v), ENT_XML1 | ENT_QUOTES, 'UTF-8');
+    };
+    $col = function (int $i): string {
+        $s = '';
+        for ($i++; $i > 0; $i = intdiv($i - 1, 26)) {
+            $s = chr(65 + ($i - 1) % 26) . $s;
+        }
+        return $s;
+    };
+    $all = array_merge([$header], $rows);
+    $widths = [];
+    $xmlRows = '';
+    foreach ($all as $r => $row) {
+        $cells = '';
+        foreach (array_values($row) as $c => $v) {
+            $v = (string)$v;
+            if ($v === '') {
+                continue;
+            }
+            $widths[$c] = max($widths[$c] ?? 8, min(60, mb_strwidth($v) + 2));
+            $cells .= '<c r="' . $col($c) . ($r + 1) . '" t="inlineStr"' . ($r === 0 ? ' s="1"' : '') . '><is><t xml:space="preserve">' . $esc($v) . '</t></is></c>';
+        }
+        $xmlRows .= '<row r="' . ($r + 1) . '">' . $cells . '</row>';
+    }
+    $cols = '';
+    foreach ($widths as $c => $w) {
+        $cols .= '<col min="' . ($c + 1) . '" max="' . ($c + 1) . '" width="' . $w . '" customWidth="1"/>';
+    }
+    $ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    $rel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    $tmp = tempnam(sys_get_temp_dir(), 'phx');
+    $zip = new ZipWriter($tmp);
+    $zip->add('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        . '<Default Extension="xml" ContentType="application/xml"/>'
+        . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        . '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+        . '</Types>');
+    $zip->add('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="' . $rel . '/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+    $zip->add('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<workbook xmlns="' . $ns . '" xmlns:r="' . $rel . '"><sheets><sheet name="' . $esc(mb_substr($sheetName, 0, 31)) . '" sheetId="1" r:id="rId1"/></sheets></workbook>');
+    $zip->add('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="' . $rel . '/worksheet" Target="worksheets/sheet1.xml"/>'
+        . '<Relationship Id="rId2" Type="' . $rel . '/styles" Target="styles.xml"/></Relationships>');
+    $zip->add('xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<styleSheet xmlns="' . $ns . '"><fonts count="2"><font><sz val="11"/><name val="Tahoma"/></font><font><b/><sz val="11"/><name val="Tahoma"/></font></fonts>'
+        . '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+        . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+        . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+        . '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>'
+        . '</styleSheet>');
+    $zip->add('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<worksheet xmlns="' . $ns . '"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+        . ($cols ? '<cols>' . $cols . '</cols>' : '') . '<sheetData>' . $xmlRows . '</sheetData></worksheet>');
+    $zip->close();
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Length: ' . filesize($tmp));
+    header("Content-Disposition: attachment; filename*=UTF-8''" . rawurlencode($filename));
+    readfile($tmp);
+    unlink($tmp);
+    exit;
 }
