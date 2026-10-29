@@ -18,7 +18,7 @@ if (is_post()) {
                 log_activity('เพิ่มภาคเรียน ' . int_param('term') . '/' . int_param('academic_year'));
                 flash('success', 'เพิ่มภาคเรียนแล้ว');
                 redirect('app/admin/semesters.php?semester=' . $newId);
-            } catch (PDOException) {
+            } catch (PDOException $ex) {
                 flash('danger', 'มีภาคเรียนนี้อยู่แล้ว');
             }
             break;

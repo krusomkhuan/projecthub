@@ -20,7 +20,12 @@ if (is_post()) {
             $c = $GLOBALS['config'];
             $root = new PDO("mysql:host={$c['db_host']};charset=utf8mb4", $c['db_user'], $c['db_pass'],
                 [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-            $root->exec("CREATE DATABASE IF NOT EXISTS `{$c['db_name']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            try {
+                $root->exec("CREATE DATABASE IF NOT EXISTS `{$c['db_name']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            } catch (PDOException $ex) {
+                // โฮสต์ทั่วไปไม่ให้สิทธิ์สร้างฐานข้อมูล: ใช้ฐานข้อมูลที่สร้างไว้จากแผงควบคุมโฮสต์แทน
+                db();
+            }
             $sql = (string)file_get_contents(__DIR__ . '/schema.sql');
             foreach (array_filter(array_map('trim', explode(';', preg_replace('/^--.*$/m', '', $sql)))) as $stmt) {
                 db()->exec($stmt);

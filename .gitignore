@@ -21,3 +21,6 @@ desktop.ini
 .vscode/
 .idea/
 *.log
+
+# ค่าตั้งค่าจริงของแต่ละเครื่อง (รหัสผ่านฐานข้อมูล)
+config.local.php

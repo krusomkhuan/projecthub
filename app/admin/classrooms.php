@@ -25,7 +25,7 @@ if (is_post()) {
                 $cid = (int)db()->lastInsertId();
             }
             flash('success', 'บันทึกกลุ่มเรียนแล้ว');
-        } catch (PDOException) {
+        } catch (PDOException $ex) {
             flash('danger', 'รหัสกลุ่มเรียนซ้ำ');
         }
     } elseif ($action === 'delete_class') {

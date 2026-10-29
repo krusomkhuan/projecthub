@@ -40,11 +40,12 @@ const GRADE_OPTIONS = ['4', '3.5', '3', '2.5', '2', '1.5', '1', '0', 'ขร', '
 const ALLOWED_UPLOADS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png', 'zip', 'rar', 'mp4'];
 
 // เวอร์ชันของระบบ: ปรับเลขทุกครั้งที่ออกรุ่นใหม่ (หลัก.รอง.แก้ไข)
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 const APP_RELEASE_DATE = '2026-10-30';
 const DEVELOPER_CREDIT ='ผู้พัฒนาระบบ : ครูสมควร สากำ แผนกวิชาเทคโนโลยีธุรกิจดิจิทัล วิทยาลัยการอาชีพโพนทอง';
 
-function e(mixed $s): string
+/** @param mixed $s */
+function e($s): string
 {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
@@ -54,13 +55,13 @@ function url(string $path = ''): string
     return BASE_URL . '/' . ltrim($path, '/');
 }
 
-function redirect(string $path): never
+function redirect(string $path): void
 {
     header('Location: ' . (str_starts_with($path, 'http') || str_starts_with($path, '/') ? $path : url($path)));
     exit;
 }
 
-function back(string $fallback = 'app/index.php'): never
+function back(string $fallback = 'app/index.php'): void
 {
     $ref = $_SERVER['HTTP_REFERER'] ?? '';
     if ($ref !== '' && parse_url($ref, PHP_URL_HOST) === ($_SERVER['HTTP_HOST'] ?? '')) {
@@ -121,7 +122,8 @@ function q_one(string $sql, array $params = []): ?array
     return $r === false ? null : $r;
 }
 
-function q_val(string $sql, array $params = []): mixed
+/** @return mixed */
+function q_val(string $sql, array $params = [])
 {
     $r = q($sql, $params)->fetchColumn();
     return $r === false ? null : $r;
@@ -215,16 +217,12 @@ function grade_from_score(?float $score): string
     if ($score === null) {
         return '';
     }
-    return match (true) {
-        $score >= 80 => '4',
-        $score >= 75 => '3.5',
-        $score >= 70 => '3',
-        $score >= 65 => '2.5',
-        $score >= 60 => '2',
-        $score >= 55 => '1.5',
-        $score >= 50 => '1',
-        default => '0',
-    };
+    foreach ([80 => '4', 75 => '3.5', 70 => '3', 65 => '2.5', 60 => '2', 55 => '1.5', 50 => '1'] as $min => $grade) {
+        if ($score >= $min) {
+            return $grade;
+        }
+    }
+    return '0';
 }
 
 /** อ่านข้อมูลแบบตาราง จากไฟล์ CSV ที่อัปโหลด หรือข้อความที่วางจาก Excel (คั่นด้วย Tab) */
@@ -279,7 +277,7 @@ function strip_header(array $rows, array $headerWords): array
     return $rows;
 }
 
-function send_csv(string $filename, array $header, array $rows): never
+function send_csv(string $filename, array $header, array $rows): void
 {
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
@@ -506,11 +504,13 @@ function xlsx_rows(string $path): array
                 $col = $col * 26 + ord($ch) - 64;
             }
             $t = (string)$c['t'];
-            $cells[$col - 1] = match ($t) {
-                's' => $shared[(int)$c->v] ?? '',
-                'inlineStr' => $text($c->is),
-                default => (string)$c->v,
-            };
+            if ($t === 's') {
+                $cells[$col - 1] = $shared[(int)$c->v] ?? '';
+            } elseif ($t === 'inlineStr') {
+                $cells[$col - 1] = $text($c->is);
+            } else {
+                $cells[$col - 1] = (string)$c->v;
+            }
         }
         if ($cells) {
             $line = array_fill(0, max(array_keys($cells)) + 1, '');
@@ -526,7 +526,7 @@ function xlsx_rows(string $path): array
 const FORM_CATEGORIES = ['แบบฟอร์มโครงงาน', 'แบบรายงานความก้าวหน้า', 'แบบประเมิน', 'ตัวอย่างรูปเล่มโครงงาน', 'คู่มือ / เอกสารอ้างอิง', 'อื่น ๆ'];
 
 /** ส่งไฟล์แบบฟอร์มให้ดาวน์โหลด และนับจำนวนครั้ง */
-function send_form_file(array $f): never
+function send_form_file(array $f): void
 {
     $path = UPLOAD_DIR . '/' . $f['file_path'];
     if (!is_file($path)) {
@@ -544,15 +544,15 @@ function send_form_file(array $f): never
 
 function file_icon(string $name): string
 {
-    return match (strtolower(pathinfo($name, PATHINFO_EXTENSION))) {
+    $icons = [
         'pdf' => 'file-earmark-pdf text-danger',
-        'doc', 'docx' => 'file-earmark-word text-primary',
-        'xls', 'xlsx' => 'file-earmark-excel text-success',
-        'ppt', 'pptx' => 'file-earmark-ppt text-warning',
-        'zip', 'rar' => 'file-earmark-zip text-secondary',
-        'jpg', 'jpeg', 'png' => 'file-earmark-image text-info',
-        default => 'file-earmark',
-    };
+        'doc' => 'file-earmark-word text-primary', 'docx' => 'file-earmark-word text-primary',
+        'xls' => 'file-earmark-excel text-success', 'xlsx' => 'file-earmark-excel text-success',
+        'ppt' => 'file-earmark-ppt text-warning', 'pptx' => 'file-earmark-ppt text-warning',
+        'zip' => 'file-earmark-zip text-secondary', 'rar' => 'file-earmark-zip text-secondary',
+        'jpg' => 'file-earmark-image text-info', 'jpeg' => 'file-earmark-image text-info', 'png' => 'file-earmark-image text-info',
+    ];
+    return $icons[strtolower(pathinfo($name, PATHINFO_EXTENSION))] ?? 'file-earmark';
 }
 
 /**
