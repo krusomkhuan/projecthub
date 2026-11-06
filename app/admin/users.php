@@ -104,6 +104,9 @@ require APP_ROOT . '/inc/header.php';
           <td><?= e($u['username']) ?></td><td class="small"><?= e(ROLE_LABELS[$u['role']]) ?><?= $u['sections'] ? ' <span class="badge text-bg-light border">' . $u['sections'] . ' กลุ่ม</span>' : '' ?></td>
           <td class="small"><?= e($u['department']) ?></td><td class="small"><?= $u['last_login'] ? thai_date($u['last_login'], true) : '<span class="text-muted">ยังไม่เคย</span>' ?></td>
           <td class="text-end text-nowrap">
+            <?php if ($u['role'] === 'teacher' && $u['active']): ?>
+            <a href="<?= url('app/teacher/teaching.php?teacher_id=' . (int)$u['id']) ?>" class="btn btn-sm btn-outline-success" title="กำหนดครูผู้สอนรายวิชาโครงงาน"><i class="bi bi-journal-plus"></i> กำหนดรายวิชา</a>
+            <?php endif; ?>
             <a href="?edit=<?= $u['id'] ?>&role=<?= e($roleFilter) ?>" class="btn btn-sm btn-outline-primary" title="แก้ไข"><i class="bi bi-pencil"></i></a>
             <?php if ((int)$u['id'] !== (int)$me['id']): ?>
             <form method="post" class="d-inline" data-confirm="รีเซ็ตรหัสผ่านเป็นชื่อผู้ใช้?"><?= csrf_field() ?><input type="hidden" name="action" value="reset"><input type="hidden" name="id" value="<?= $u['id'] ?>"><input type="hidden" name="return_role" value="<?= e($roleFilter) ?>"><button class="btn btn-sm btn-outline-warning" title="รีเซ็ตรหัสผ่าน"><i class="bi bi-key"></i></button></form>

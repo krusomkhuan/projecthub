@@ -1,7 +1,18 @@
 <?php
 declare(strict_types=1);
 require dirname(__DIR__, 2) . '/inc/bootstrap.php';
-$me = require_login('teacher');
+$me = require_login('teacher', 'admin');
+$isAdmin = $me['role'] === 'admin';
+// ครูแก้ไขได้เฉพาะของตนเอง แม้ส่ง teacher_id ของผู้อื่นมา
+$teacher = $isAdmin
+    ? q_one('SELECT * FROM users WHERE id = ? AND role = "teacher" AND active = 1', [int_param('teacher_id')])
+    : $me;
+if (!$teacher) {
+    flash('warning', 'กรุณาเลือกครูผู้สอนที่เปิดใช้งาน');
+    redirect('app/admin/users.php');
+}
+$teachingUrl = 'app/teacher/teaching.php' . ($isAdmin ? '?teacher_id=' . (int)$teacher['id'] : '');
+$cancelUrl = $isAdmin ? 'app/admin/users.php' : 'app/teacher/sections.php';
 $sem = teaching_semester();
 $semId = (int)($sem['id'] ?? 0);
 
@@ -11,15 +22,15 @@ if (is_post() && $sem) {
     $selected = array_values(array_unique(array_map('intval', (array)($_POST['classrooms'] ?? []))));
     $subjectCode = mb_substr(input('subject_code'), 0, 30);
     $subjectName = mb_substr(input('subject_name', 'โครงงาน'), 0, 200) ?: 'โครงงาน';
-    if (input('teaches') === '') {
+    if (!in_array(input('teaches'), ['0', '1'], true)) {
         flash('danger', 'กรุณาเลือกว่าสอนรายวิชาโครงงานในภาคเรียนนี้หรือไม่');
-        redirect('app/teacher/teaching.php');
+        redirect($teachingUrl);
     }
     if ($teaches && !$selected) {
         flash('danger', 'กรุณาเลือกกลุ่มผู้เรียนที่สอนอย่างน้อย 1 กลุ่ม');
-        redirect('app/teacher/teaching.php');
+        redirect($teachingUrl);
     }
-    $first = !q_val('SELECT 1 FROM teacher_declarations WHERE teacher_id = ? AND semester_id = ?', [$me['id'], $semId]);
+    $first = !q_val('SELECT 1 FROM teacher_declarations WHERE teacher_id = ? AND semester_id = ?', [$teacher['id'], $semId]);
     $warnings = [];
     $added = $removed = 0;
 
@@ -27,13 +38,13 @@ if (is_post() && $sem) {
     $desired = $teaches ? $selected : [];
     // กลุ่มที่เคยเลือกไว้แต่ไม่ได้เลือกแล้ว: นำออก เว้นแต่มีกลุ่มโครงงานแล้ว
     foreach (q_all('SELECT s.id, s.classroom_id, c.name, (SELECT COUNT(*) FROM projects p WHERE p.section_id = s.id) AS projects
-                    FROM sections s JOIN classrooms c ON c.id = s.classroom_id WHERE s.teacher_id = ? AND s.semester_id = ? FOR UPDATE', [$me['id'], $semId]) as $s) {
+                    FROM sections s JOIN classrooms c ON c.id = s.classroom_id WHERE s.teacher_id = ? AND s.semester_id = ? FOR UPDATE', [$teacher['id'], $semId]) as $s) {
         if (in_array((int)$s['classroom_id'], $desired, true)) {
             q('UPDATE sections SET subject_code = ?, subject_name = ? WHERE id = ?', [$subjectCode, $subjectName, $s['id']]);
             continue;
         }
         if ($s['projects']) {
-            $warnings[] = "{$s['name']} มีกลุ่มโครงงานแล้ว {$s['projects']} กลุ่ม จึงยังคงไว้ (ติดต่อผู้ดูแลระบบหากต้องการย้ายให้ครูท่านอื่น)";
+            $warnings[] = "{$s['name']} มีกลุ่มโครงงานแล้ว {$s['projects']} กลุ่ม จึงยังคงไว้ (" . ($isAdmin ? 'เปลี่ยนครูผู้สอนได้ที่เมนูรายวิชาโครงงาน' : 'ติดต่อผู้ดูแลระบบหากต้องการย้ายให้ครูท่านอื่น') . ')';
             continue;
         }
         q('DELETE FROM sections WHERE id = ?', [$s['id']]);
@@ -43,7 +54,7 @@ if (is_post() && $sem) {
     foreach ($desired as $cid) {
         $owner = q_one('SELECT s.teacher_id, t.prefix, t.full_name, c.name FROM sections s JOIN users t ON t.id = s.teacher_id JOIN classrooms c ON c.id = s.classroom_id
                         WHERE s.semester_id = ? AND s.classroom_id = ? LIMIT 1 FOR UPDATE', [$semId, $cid]);
-        if ($owner && (int)$owner['teacher_id'] === (int)$me['id']) {
+        if ($owner && (int)$owner['teacher_id'] === (int)$teacher['id']) {
             continue;
         }
         if ($owner) {
@@ -53,51 +64,56 @@ if (is_post() && $sem) {
         if (!q_val('SELECT 1 FROM classrooms WHERE id = ?', [$cid])) {
             continue;
         }
-        q('INSERT INTO sections (semester_id, classroom_id, teacher_id, subject_code, subject_name) VALUES (?,?,?,?,?)', [$semId, $cid, $me['id'], $subjectCode, $subjectName]);
+        q('INSERT INTO sections (semester_id, classroom_id, teacher_id, subject_code, subject_name) VALUES (?,?,?,?,?)', [$semId, $cid, $teacher['id'], $subjectCode, $subjectName]);
         $added++;
     }
-    $count = (int)q_val('SELECT COUNT(*) FROM sections WHERE teacher_id = ? AND semester_id = ?', [$me['id'], $semId]);
+    $count = (int)q_val('SELECT COUNT(*) FROM sections WHERE teacher_id = ? AND semester_id = ?', [$teacher['id'], $semId]);
     q('INSERT INTO teacher_declarations (teacher_id, semester_id, teaches_project) VALUES (?,?,?) ON DUPLICATE KEY UPDATE teaches_project = VALUES(teaches_project)',
-        [$me['id'], $semId, (int)($count > 0)]);
+        [$teacher['id'], $semId, (int)($count > 0)]);
     db()->commit();
 
-    log_activity(($first ? 'แจ้ง' : 'แก้ไข') . 'รายวิชาที่สอน ' . semester_label($sem) . ': ' . ($count ? "สอนโครงงาน $count กลุ่ม (เพิ่ม $added นำออก $removed)" : 'ไม่ได้สอนโครงงาน'));
+    log_activity(($isAdmin ? 'กำหนดครูผู้สอน ' . person($teacher) . ' (' . $teacher['username'] . ') — ' : '') . ($first ? 'แจ้ง' : 'แก้ไข') . 'รายวิชาที่สอน ' . semester_label($sem) . ': ' . ($count ? "สอนโครงงาน $count กลุ่ม (เพิ่ม $added นำออก $removed)" : 'ไม่ได้สอนโครงงาน'));
     flash('success', $count ? "บันทึกแล้ว: สอนรายวิชาโครงงาน $count กลุ่มผู้เรียน" : 'บันทึกแล้ว: ไม่ได้สอนรายวิชาโครงงานในภาคเรียนนี้');
     if ($warnings) {
         flash('warning', implode(' · ', $warnings));
     }
-    redirect($first && $count ? 'app/teacher/sections.php' : 'app/teacher/teaching.php');
+    redirect($isAdmin ? $cancelUrl : ($first && $count ? 'app/teacher/sections.php' : $teachingUrl));
 }
 
-$decl = $sem ? q_one('SELECT * FROM teacher_declarations WHERE teacher_id = ? AND semester_id = ?', [$me['id'], $semId]) : null;
+$decl = $sem ? q_one('SELECT * FROM teacher_declarations WHERE teacher_id = ? AND semester_id = ?', [$teacher['id'], $semId]) : null;
 $mine = [];
 $subject = ['subject_code' => '', 'subject_name' => 'โครงงาน'];
 $taken = [];
 if ($sem) {
-    foreach (q_all('SELECT s.*, (SELECT COUNT(*) FROM projects p WHERE p.section_id = s.id) AS projects FROM sections s WHERE s.teacher_id = ? AND s.semester_id = ?', [$me['id'], $semId]) as $s) {
+    foreach (q_all('SELECT s.*, (SELECT COUNT(*) FROM projects p WHERE p.section_id = s.id) AS projects FROM sections s WHERE s.teacher_id = ? AND s.semester_id = ?', [$teacher['id'], $semId]) as $s) {
         $mine[(int)$s['classroom_id']] = $s;
         $subject = $s;
     }
-    foreach (q_all('SELECT s.classroom_id, t.prefix, t.full_name FROM sections s JOIN users t ON t.id = s.teacher_id WHERE s.semester_id = ? AND s.teacher_id <> ?', [$semId, $me['id']]) as $t) {
+    foreach (q_all('SELECT s.classroom_id, t.prefix, t.full_name FROM sections s JOIN users t ON t.id = s.teacher_id WHERE s.semester_id = ? AND s.teacher_id <> ?', [$semId, $teacher['id']]) as $t) {
         $taken[(int)$t['classroom_id']] = person($t);
     }
 }
 $classrooms = q_all('SELECT * FROM classrooms ORDER BY level, code');
 $teaches = $decl ? (bool)$decl['teaches_project'] : ($mine ? true : null);
-$pageTitle = 'แจ้งรายวิชาที่สอน';
+$pageTitle = $isAdmin ? 'กำหนดครูผู้สอนรายวิชาโครงงาน' : 'กำหนดรายวิชา / กลุ่มผู้เรียน';
 require APP_ROOT . '/inc/header.php';
 ?>
-<div class="page-head"><div><h1><i class="bi bi-pencil-square"></i> แจ้งรายวิชาที่สอน</h1>
+<div class="page-head"><div><h1><i class="bi bi-pencil-square"></i> <?= e($pageTitle) ?></h1>
   <div class="text-muted"><?= e(semester_label($sem)) ?><?= $decl ? ' · แจ้งล่าสุด ' . thai_date($decl['updated_at'], true) : '' ?></div></div></div>
 
 <?php if (!$sem): ?>
   <div class="card card-body text-muted">ยังไม่เปิดภาคเรียน กรุณาติดต่อผู้ดูแลระบบ</div>
 <?php else: ?>
-<?php if (!$decl): ?>
-  <div class="alert alert-info"><i class="bi bi-info-circle"></i> <strong>ยินดีต้อนรับ</strong> กรุณาแจ้งว่าท่านสอนรายวิชาโครงงานใน<?= e(semester_label($sem)) ?>หรือไม่ และสอนกลุ่มผู้เรียนใดบ้าง ระบบจะสร้างรายวิชาให้อัตโนมัติ แก้ไขได้ภายหลังที่เมนู "แจ้งรายวิชาที่สอน"</div>
+<?php if ($isAdmin): ?>
+  <div class="alert alert-info">กำหนดรายวิชาโครงงานให้ <strong><?= e(person($teacher)) ?></strong> (<?= e($teacher['username']) ?>) ใน<?= e(semester_label($sem)) ?> โดยเลือกสถานะการสอนและกลุ่มผู้เรียน แล้วกดบันทึก</div>
+<?php elseif (!$decl): ?>
+  <div class="alert alert-info"><i class="bi bi-info-circle"></i> <strong>ยินดีต้อนรับ</strong> กรุณาแจ้งว่าท่านสอนรายวิชาโครงงานใน<?= e(semester_label($sem)) ?>หรือไม่ และสอนกลุ่มผู้เรียนใดบ้าง ระบบจะสร้างรายวิชาให้อัตโนมัติ แก้ไขได้ภายหลังที่เมนู "กำหนดรายวิชา / ผู้เรียน"</div>
 <?php endif; ?>
-<form method="post" id="teachForm"><?= csrf_field() ?>
-  <div class="card mb-3"><div class="card-header">1. ท่านสอนรายวิชาโครงงานในภาคเรียนนี้หรือไม่?</div><div class="card-body">
+<?php if (!$isAdmin): ?>
+  <div class="alert alert-light border small">เลือกวิชาและกลุ่มผู้เรียนที่ท่านสอน แล้วบันทึก จากนั้นไปที่ <a href="<?= url('app/teacher/sections.php') ?>">รายวิชาที่สอน</a> → <strong>จัดการผู้เรียน</strong> เพื่อดูรายชื่อ เพิ่มผู้เรียนทีละคน หรือนำเข้ารายชื่อจาก Excel / CSV</div>
+<?php endif; ?>
+<form method="post" id="teachForm" action="<?= url($teachingUrl) ?>"><?= csrf_field() ?>
+  <div class="card mb-3"><div class="card-header">1. <?= $isAdmin ? 'ครูท่านนี้' : 'ท่าน' ?>สอนรายวิชาโครงงานในภาคเรียนนี้หรือไม่?</div><div class="card-body">
     <div class="row g-2">
       <div class="col-md-6"><input type="radio" class="btn-check" name="teaches" id="tYes" value="1"<?= $teaches === true ? ' checked' : '' ?>>
         <label class="btn btn-outline-success w-100 py-3" for="tYes"><i class="bi bi-check-circle fs-4 d-block"></i>สอนรายวิชาโครงงาน</label></div>
@@ -139,7 +155,7 @@ require APP_ROOT . '/inc/header.php';
   </div>
 
   <button class="btn btn-primary btn-lg"><i class="bi bi-save"></i> บันทึก</button>
-  <?php if ($decl): ?><a href="<?= url('app/teacher/sections.php') ?>" class="btn btn-light btn-lg">ยกเลิก</a><?php endif; ?>
+  <?php if ($decl || $isAdmin): ?><a href="<?= url($cancelUrl) ?>" class="btn btn-light btn-lg">ยกเลิก</a><?php endif; ?>
 </form>
 <?php endif; ?>
 <?php

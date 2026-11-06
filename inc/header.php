@@ -41,7 +41,7 @@ if ($me) {
             break;
         case 'teacher':
             $menu[] = ['app/teacher/sections.php', 'journal-bookmark', 'รายวิชาที่สอน'];
-            $menu[] = ['app/teacher/teaching.php', 'pencil-square', 'แจ้งรายวิชาที่สอน'];
+            $menu[] = ['app/teacher/teaching.php', 'pencil-square', 'กำหนดรายวิชา / ผู้เรียน'];
             $menu[] = ['app/projects.php', 'kanban', 'โครงงานในความดูแล'];
             $menu[] = ['app/teacher/pending.php', 'inbox', 'รายงานรอตรวจ'];
             $menu[] = ['app/report_semester.php', 'file-earmark-bar-graph', 'รายงานสิ้นภาคเรียน'];

@@ -93,7 +93,7 @@ require APP_ROOT . '/inc/header.php';
     <?php if ($declStatus['none']): ?>
       <details class="mt-2"><summary>รายชื่อครูที่ยังไม่แจ้ง</summary><div class="text-muted mt-1"><?= e(implode(', ', $declStatus['none'])) ?></div></details>
     <?php endif; ?>
-    <div class="text-muted mt-2">ครูแจ้งเองเมื่อเข้าสู่ระบบครั้งแรก และแก้ไขได้ที่เมนู "แจ้งรายวิชาที่สอน"</div>
+    <div class="text-muted mt-2">ครูแจ้งเองเมื่อเข้าสู่ระบบครั้งแรก และแก้ไขได้ที่เมนู "กำหนดรายวิชา / ผู้เรียน" ผู้ดูแลระบบกำหนดแทนได้ที่เมนู "ครูและบุคลากร"</div>
   </div></div>
   <div class="card"><div class="card-header">เพิ่มรายวิชาโครงงาน</div><div class="card-body">
     <?php if (!$teachers || !$classrooms): ?><div class="alert alert-warning small">กรุณานำเข้าครูผู้สอนและกลุ่มผู้เรียนก่อน · <a href="<?= url('app/admin/import.php') ?>">นำเข้าข้อมูล</a></div><?php endif; ?>
